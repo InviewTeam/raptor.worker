@@ -1,0 +1,3 @@
+[submodule "modules/log"]
+	path = modules/log
+	url = https://gitlab.com/inview-team/raptor_team/modules/log.git
