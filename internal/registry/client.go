@@ -32,7 +32,7 @@ func GetNewTask() (task.Task, error) {
 	return result, nil
 }
 
-func GetStatusOfTask(uuid string) (bool, error) {
+func GetStatusOfTask(uuid string) bool {
 	addr := fmt.Sprintf("$s/api/$s/$s", registryURL, "status", uuid)
 	resp, err := http.Get(addr)
 	if err != nil {
@@ -52,7 +52,7 @@ func GetStatusOfTask(uuid string) (bool, error) {
 	}
 
 	if result.Status == "stop" {
-		return false, nil
+		return false
 	}
-	return true, nil
+	return true
 }
