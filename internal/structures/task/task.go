@@ -1,4 +1,4 @@
-package structures
+package task
 
 type Task struct {
 	UUID     string `json:"uuid"`
@@ -8,4 +8,8 @@ type Task struct {
 
 type Job struct {
 	Title string `json:"title"`
+}
+
+type Status struct {
+	Status string `json:"status"`
 }
