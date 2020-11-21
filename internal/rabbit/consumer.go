@@ -1,18 +1,19 @@
 package rabbit
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/streadway/amqp"
 	"gitlab.com/inview-team/raptor_team/worker/internal/logger"
-	"os"
+	"gitlab.com/inview-team/raptor_team/worker/internal/structures/task"
 )
 
 var (
-	rabbitLogin   = os.Getenv("RABBIT_LOGIN")
-	rabbitPwd     = os.Getenv("RABBIT_PASSWORD")
-	rabbitHost    = os.Getenv("RABBIT")
-	rabbitPort    = os.Getenv("RABBIT_PORT")
-	rabbitChannel = os.Getenv("RABBIT_CHANNEL")
+	rabbitLogin   = "guest"     //os.Getenv("RABBIT_LOGIN")
+	rabbitPwd     = "guest"     //os.Getenv("RABBIT_PASSWORD")
+	rabbitHost    = "127.0.0.1" //os.Getenv("RABBIT")
+	rabbitPort    = "5672"      //os.Getenv("RABBIT_PORT")
+	rabbitChannel = "worker"    //os.Getenv("RABBIT_CHANNEL")
 )
 
 func failOnError(err error, msg string) {
@@ -22,8 +23,8 @@ func failOnError(err error, msg string) {
 }
 
 func RabbitRun() {
-	rabbitAddr, _ := fmt.Printf("amqp://%s:%s@%s:%s/", rabbitLogin, rabbitPwd, rabbitHost, rabbitPort)
-	conn, err := amqp.Dial(string(rabbitAddr))
+	rabbitAddr := fmt.Sprintf("amqp://%s:%s@%s:%s/", rabbitLogin, rabbitPwd, rabbitHost, rabbitPort)
+	conn, err := amqp.Dial(rabbitAddr)
 	failOnError(err, "Failed to connect to RabbitMQ")
 	defer conn.Close()
 
@@ -55,8 +56,27 @@ func RabbitRun() {
 	forever := make(chan bool)
 
 	go func() {
-		for d := range msgs {
-			logger.Info.Printf("Received a message: %s", d.Body)
+		for msg := range msgs {
+			logger.Info.Printf(string(msg.Body))
+
+			taskInfo := &task.Task{}
+			err := json.Unmarshal(msg.Body, taskInfo)
+
+			if err != nil {
+				logger.Error.Printf(err.Error())
+			}
+
+			if taskInfo.UUID != "" && taskInfo.CameraIP != "" && taskInfo.Status == "" {
+				logger.Info.Printf("Start new task %s", taskInfo.UUID)
+				for i := range taskInfo.Jobs {
+					logger.Info.Printf(taskInfo.Jobs[i])
+				}
+			} else if taskInfo.UUID != "" && taskInfo.Status != "" && taskInfo.CameraIP == "" {
+				logger.Info.Printf("Stop task %s", taskInfo.UUID)
+			} else {
+				logger.Error.Printf("Unsupported format")
+			}
+
 		}
 	}()
 
