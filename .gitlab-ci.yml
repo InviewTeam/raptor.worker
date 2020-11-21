@@ -1,0 +1,17 @@
+stages:
+  - build
+  - test
+
+worker_build:
+  stage: build
+  image: 
+    name: golang:1.15.2
+  script:
+    - make
+
+docker_build:
+  stage: build
+  image:
+    name: gitlab/dind
+  script:
+    - docker build -f ./build/Dockerfile .
