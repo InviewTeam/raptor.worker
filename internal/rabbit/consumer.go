@@ -6,14 +6,15 @@ import (
 	"github.com/streadway/amqp"
 	"gitlab.com/inview-team/raptor_team/worker/internal/logger"
 	"gitlab.com/inview-team/raptor_team/worker/internal/structures/task"
+	"os"
 )
 
 var (
-	rabbitLogin   = "guest"     //os.Getenv("RABBIT_LOGIN")
-	rabbitPwd     = "guest"     //os.Getenv("RABBIT_PASSWORD")
-	rabbitHost    = "127.0.0.1" //os.Getenv("RABBIT")
-	rabbitPort    = "5672"      //os.Getenv("RABBIT_PORT")
-	rabbitChannel = "worker"    //os.Getenv("RABBIT_CHANNEL")
+	rabbitLogin   = os.Getenv("RABBIT_LOGIN")
+	rabbitPwd     = os.Getenv("RABBIT_PASSWORD")
+	rabbitHost    = os.Getenv("RABBIT")
+	rabbitPort    = os.Getenv("RABBIT_PORT")
+	rabbitChannel = os.Getenv("RABBIT_CHANNEL")
 )
 
 func failOnError(err error, msg string) {
