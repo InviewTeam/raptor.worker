@@ -41,4 +41,15 @@ spec:
       containers:
       - name: worker
         image: inviewteam/raptor-worker 
+        env:
+        - name: RABBIT
+          value: "localhost"
+        - name: RABBIT_PORT
+          value: "5672"
+        - name: RABBIT_CHANNEL
+          value: "worker"
+        - name: RABBIT_LOGIN
+          value: "guest"
+        - name: RABBIT_PASSWORD
+          value: "guest"
 ```
