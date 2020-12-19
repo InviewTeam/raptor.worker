@@ -5,4 +5,4 @@ COPY       go.sum .
 RUN        go mod download
 COPY       . .
 RUN        go build -o worker ./cmd/main.go
-ENTRYPOINT ["./registry"]
+ENTRYPOINT ["./worker"]
