@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/streadway/amqp"
+	"gitlab.com/inview-team/raptor_team/worker/internal/cameras"
 	"gitlab.com/inview-team/raptor_team/worker/internal/logger"
 	"gitlab.com/inview-team/raptor_team/worker/internal/structures/task"
 	"os"
@@ -69,9 +70,8 @@ func RabbitRun() {
 
 			if taskInfo.UUID != "" && taskInfo.CameraIP != "" && taskInfo.Status == "" {
 				logger.Info.Printf("Start new task %s", taskInfo.UUID)
-				for i := range taskInfo.Jobs {
-					logger.Info.Printf(taskInfo.Jobs[i])
-				}
+				cameras.checkConnectionToCamera(taskInfo.CameraIP)
+
 			} else if taskInfo.UUID != "" && taskInfo.Status != "" && taskInfo.CameraIP == "" {
 				logger.Info.Printf("Stop task %s", taskInfo.UUID)
 			} else {
