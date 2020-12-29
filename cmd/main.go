@@ -1,11 +1,12 @@
 package main
 
 import (
+	"gitlab.com/inview-team/raptor_team/worker/internal/cameras"
 	"gitlab.com/inview-team/raptor_team/worker/internal/logger"
-	"gitlab.com/inview-team/raptor_team/worker/internal/rabbit"
 )
 
 func main() {
 	logger.Info.Print("Worker start")
-	rabbit.RabbitRun()
+	var url = "rtsp://user:qwerty1234@10.10.0.136:5506/cam/realmonitor?channel=1&subtype=0"
+	cameras.ServeStream(url)
 }
