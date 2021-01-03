@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/streadway/amqp"
+	"gitlab.com/inview-team/raptor_team/worker/internal/cameras"
 	"gitlab.com/inview-team/raptor_team/worker/internal/logger"
-	"gitlab.com/inview-team/raptor_team/worker/internal/structures/task"
+	"gitlab.com/inview-team/raptor_team/worker/internal/structures"
 	"os"
 )
 
@@ -60,22 +61,26 @@ func RabbitRun() {
 		for msg := range msgs {
 			logger.Info.Printf(string(msg.Body))
 
-			taskInfo := &task.Task{}
+			taskInfo := &structures.Task{}
 			err := json.Unmarshal(msg.Body, taskInfo)
 
 			if err != nil {
 				logger.Error.Printf(err.Error())
 			}
 
-			if taskInfo.UUID != "" && taskInfo.CameraIP != "" && taskInfo.Status == "" {
+			if taskInfo.Status == "" {
 				logger.Info.Printf("Start new task %s", taskInfo.UUID)
-
-			} else if taskInfo.UUID != "" && taskInfo.Status != "" && taskInfo.CameraIP == "" {
+				job = make(chan string)
+				done = make(chan bool)
+				go func() {
+					go cameras.ServeStream(taskInfo.CameraIP)
+					// Convert WebRTC
+				}()
+			} else if taskInfo.CameraIP == "" {
 				logger.Info.Printf("Stop task %s", taskInfo.UUID)
 			} else {
 				logger.Error.Printf("Unsupported format")
 			}
-
 		}
 	}()
 

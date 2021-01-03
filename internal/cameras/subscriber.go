@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func ServeStream(url string) {
+func SubsribeStream(url string) {
 	for {
 		logger.Info.Println("Connect to ", url)
 		rtsp.DebugRtsp = true
@@ -16,6 +16,21 @@ func ServeStream(url string) {
 			time.Sleep(5 + time.Second)
 			continue
 		}
+		session.RtpKeepAliveTimeout = 10 * time.Second
+		if err != nil {
+			logger.Error.Println(err.Error())
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		codec, err := session.Streams()
+		if err != nil {
+			logger.Error.Println(err.Error())
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		Config.coAd(codec)
+
 		for {
 			pkt, err := session.ReadPacket()
 			if err != nil {
