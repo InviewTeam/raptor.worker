@@ -17,7 +17,7 @@ var (
 	outboundVideoTrack *webrtc.TrackLocalStaticSample
 )
 
-func WorkWithVideo(url string, port string) {
+func WorkWithVideo(url string, addr string, ch <-chan bool) {
 	var err error
 	outboundVideoTrack, err = webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{
 		MimeType: "video/h264",
@@ -26,16 +26,15 @@ func WorkWithVideo(url string, port string) {
 		logger.Critical.Panic(err.Error())
 	}
 
-	go rtspConsumer(url)
+	go rtspConsumer(url, ch)
 	http.Handle("/", http.FileServer(http.Dir("C://Users/sitadm/GolandProjects/worker/internal/cameras/static")))
 	http.HandleFunc("/doSignaling", doSignaling)
 
 	logger.Info.Println("Starting stream")
-	logger.Critical.Panic(http.ListenAndServe(port, nil))
-
+	logger.Critical.Panic(http.ListenAndServe(addr, nil))
 }
 
-func rtspConsumer(url string) {
+func rtspConsumer(url string, ch <-chan bool) {
 	annexbNALUStartCode := func() []byte { return []byte{0x00, 0x00, 0x00, 0x01} }
 	for {
 		session, err := rtsp.Dial(url)
@@ -63,6 +62,15 @@ func rtspConsumer(url string) {
 		var previousTime time.Duration
 
 		for {
+			select {
+			case msg := <-ch:
+				if msg {
+					return
+				}
+			default:
+				continue
+			}
+
 			pkt, err := session.ReadPacket()
 			if err != nil {
 				break

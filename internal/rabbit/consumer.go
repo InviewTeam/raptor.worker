@@ -56,6 +56,7 @@ func RabbitRun() {
 	failOnError(err, "Failed to register a consumer")
 
 	forever := make(chan bool)
+	stream := make(chan bool)
 
 	go func() {
 		for msg := range msgs {
@@ -70,12 +71,10 @@ func RabbitRun() {
 
 			if taskInfo.Status == "" {
 				logger.Info.Printf("Start new task %s", taskInfo.UUID)
-				go func() {
-					go cameras.ServeStream(taskInfo.CameraIP)
-					// Convert WebRTC
-				}()
+				go cameras.WorkWithVideo(taskInfo.CameraIP, taskInfo.ADDR, stream)
 			} else if taskInfo.CameraIP == "" {
 				logger.Info.Printf("Stop task %s", taskInfo.UUID)
+				stream <- true
 			} else {
 				logger.Error.Printf("Unsupported format")
 			}
