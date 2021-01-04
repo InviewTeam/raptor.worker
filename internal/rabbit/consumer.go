@@ -70,8 +70,6 @@ func RabbitRun() {
 
 			if taskInfo.Status == "" {
 				logger.Info.Printf("Start new task %s", taskInfo.UUID)
-				job = make(chan string)
-				done = make(chan bool)
 				go func() {
 					go cameras.ServeStream(taskInfo.CameraIP)
 					// Convert WebRTC
