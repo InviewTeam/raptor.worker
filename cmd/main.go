@@ -7,6 +7,6 @@ import (
 
 func main() {
 	logger.Info.Print("Worker start")
-	var url = "rtsp://user:qwerty1234@10.10.0.136:5506/cam/realmonitor?channel=1&subtype=0"
+	// var url = "rtsp://user:qwerty1234@10.10.0.136:5506/cam/realmonitor?channel=1&subtype=0"
 	rabbit.RabbitRun()
 }
