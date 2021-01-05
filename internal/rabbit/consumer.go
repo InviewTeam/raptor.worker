@@ -7,15 +7,14 @@ import (
 	"gitlab.com/inview-team/raptor_team/worker/internal/cameras"
 	"gitlab.com/inview-team/raptor_team/worker/internal/logger"
 	"gitlab.com/inview-team/raptor_team/worker/internal/structures"
-	"os"
 )
 
 var (
-	rabbitLogin   = os.Getenv("RABBIT_LOGIN")
-	rabbitPwd     = os.Getenv("RABBIT_PASSWORD")
-	rabbitHost    = os.Getenv("RABBIT")
-	rabbitPort    = os.Getenv("RABBIT_PORT")
-	rabbitChannel = os.Getenv("RABBIT_CHANNEL")
+	rabbitLogin   = "cjospkim"                               // os.Getenv("RABBIT_LOGIN")
+	rabbitPwd     = "Pw3o7bgALxovyD7RLWl6jTq2Mprpqyit"       // os.Getenv("RABBIT_PASSWORD")
+	rabbitHost    = "rattlesnake.rmq.cloudamqp.com/cjospkim" // os.Getenv("RABBIT")
+	rabbitPort    = "5672"                                   // os.Getenv("RABBIT_PORT")
+	rabbitChannel = "worker"                                 // os.Getenv("RABBIT_CHANNEL")
 )
 
 func failOnError(err error, msg string) {
@@ -25,7 +24,8 @@ func failOnError(err error, msg string) {
 }
 
 func RabbitRun() {
-	rabbitAddr := fmt.Sprintf("amqp://%s:%s@%s:%s/", rabbitLogin, rabbitPwd, rabbitHost, rabbitPort)
+	rabbitAddr := fmt.Sprintf("amqps://%s:%s@%s", rabbitLogin, rabbitPwd, rabbitHost)
+	isStream := false
 	conn, err := amqp.Dial(rabbitAddr)
 	failOnError(err, "Failed to connect to RabbitMQ")
 	defer conn.Close()
@@ -70,11 +70,21 @@ func RabbitRun() {
 			}
 
 			if taskInfo.Status == "" {
-				logger.Info.Printf("Start new task %s", taskInfo.UUID)
-				go cameras.WorkWithVideo(taskInfo.CameraIP, taskInfo.ADDR, stream)
+				if !isStream {
+					logger.Info.Printf("Start new task %s", taskInfo.UUID)
+					isStream = true
+					go cameras.WorkWithVideo(taskInfo.CameraIP, taskInfo.ADDR, stream)
+				} else {
+					logger.Info.Println("Stream already started")
+				}
 			} else if taskInfo.CameraIP == "" {
-				logger.Info.Printf("Stop task %s", taskInfo.UUID)
-				stream <- true
+				if isStream {
+					logger.Info.Printf("Stop task %s", taskInfo.UUID)
+					isStream = false
+					stream <- true
+				} else {
+					logger.Info.Println("Stream didn't started")
+				}
 			} else {
 				logger.Error.Printf("Unsupported format")
 			}

@@ -27,11 +27,17 @@ func WorkWithVideo(url string, addr string, ch <-chan bool) {
 	}
 
 	go rtspConsumer(url, ch)
-	http.Handle("/", http.FileServer(http.Dir("C://Users/sitadm/GolandProjects/worker/internal/cameras/static")))
-	http.HandleFunc("/doSignaling", doSignaling)
+	server := &http.Server{Addr: addr}
+	go server.ListenAndServe()
 
-	logger.Info.Println("Starting stream")
-	logger.Critical.Panic(http.ListenAndServe(addr, nil))
+	for {
+		select {
+		case <-ch:
+			server.Close()
+			return
+		default:
+		}
+	}
 }
 
 func rtspConsumer(url string, ch <-chan bool) {
@@ -61,16 +67,9 @@ func rtspConsumer(url string, ch <-chan bool) {
 
 		var previousTime time.Duration
 
-		for {
-			select {
-			case msg := <-ch:
-				if msg {
-					return
-				}
-			default:
-				continue
-			}
+		logger.Info.Println("Start streaming ", url)
 
+		for {
 			pkt, err := session.ReadPacket()
 			if err != nil {
 				break
@@ -95,6 +94,13 @@ func rtspConsumer(url string, ch <-chan bool) {
 			if err = outboundVideoTrack.WriteSample(media.Sample{Data: pkt.Data, Duration: bufferDuration}); err != nil && err != io.ErrClosedPipe {
 				logger.Critical.Panic("RTSP feed must begin with a H264 codec")
 			}
+
+			select {
+			case <-ch:
+				return
+			default:
+			}
+
 		}
 
 		if err = session.Close(); err != nil {
@@ -105,7 +111,7 @@ func rtspConsumer(url string, ch <-chan bool) {
 	}
 }
 
-func doSignaling(w http.ResponseWriter, r *http.Request) {
+func DoSignaling(w http.ResponseWriter, r *http.Request) {
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
 		logger.Critical.Panic(err.Error())
