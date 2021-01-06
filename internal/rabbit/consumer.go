@@ -7,14 +7,15 @@ import (
 	"gitlab.com/inview-team/raptor_team/worker/internal/cameras"
 	"gitlab.com/inview-team/raptor_team/worker/internal/logger"
 	"gitlab.com/inview-team/raptor_team/worker/internal/structures"
+	"os"
 )
 
 var (
-	rabbitLogin   = "cjospkim"                               // os.Getenv("RABBIT_LOGIN")
-	rabbitPwd     = "Pw3o7bgALxovyD7RLWl6jTq2Mprpqyit"       // os.Getenv("RABBIT_PASSWORD")
-	rabbitHost    = "rattlesnake.rmq.cloudamqp.com/cjospkim" // os.Getenv("RABBIT")
-	rabbitPort    = "5672"                                   // os.Getenv("RABBIT_PORT")
-	rabbitChannel = "worker"                                 // os.Getenv("RABBIT_CHANNEL")
+	rabbitLogin   = os.Getenv("RABBIT_LOGIN")
+	rabbitPwd     = os.Getenv("RABBIT_PASSWORD")
+	rabbitHost    = os.Getenv("RABBIT")
+	rabbitPort    = os.Getenv("RABBIT_PORT")
+	rabbitChannel = os.Getenv("RABBIT_CHANNEL")
 )
 
 func failOnError(err error, msg string) {

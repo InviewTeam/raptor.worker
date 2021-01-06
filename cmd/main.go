@@ -9,7 +9,6 @@ import (
 
 func main() {
 	logger.Info.Print("Worker start")
-	http.Handle("/", http.FileServer(http.Dir("E://Inview/worker/internal/cameras/static")))
 	http.HandleFunc("/doSignaling", cameras.DoSignaling)
 	rabbit.RabbitRun()
 }
