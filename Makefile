@@ -9,3 +9,5 @@ run:
 
 docker:
 	docker build --tag $(CMD) -f ./build/Dockerfile .
+
+.PHONY: build run docker
