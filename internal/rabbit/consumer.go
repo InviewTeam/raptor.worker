@@ -1,97 +1,133 @@
 package rabbit
 
 import (
-	"encoding/json"
+	"context"
+	"errors"
 	"fmt"
+	"log"
+	"time"
+
+	"github.com/cenkalti/backoff"
 	"github.com/streadway/amqp"
-	"gitlab.com/inview-team/raptor_team/worker/internal/cameras"
-	"gitlab.com/inview-team/raptor_team/worker/internal/logger"
-	"gitlab.com/inview-team/raptor_team/worker/internal/structures"
-	"os"
 )
 
-var (
-	rabbitLogin   = os.Getenv("RABBIT_LOGIN")
-	rabbitPwd     = os.Getenv("RABBIT_PASSWORD")
-	rabbitHost    = os.Getenv("RABBIT")
-	rabbitPort    = os.Getenv("RABBIT_PORT")
-	rabbitChannel = os.Getenv("RABBIT_CHANNEL")
-)
+type Consumer struct {
+	addr        string
+	queue       string
+	conn        *amqp.Connection
+	channel     *amqp.Channel
+	done        chan error
+	dataChannel chan []byte
+}
 
-func failOnError(err error, msg string) {
-	if err != nil {
-		logger.Critical.Fatalf("%s:%s", msg, err)
+func NewConsumer(addr, queue string, ch chan []byte) *Consumer {
+	return &Consumer{
+		addr:        addr,
+		queue:       queue,
+		done:        make(chan error),
+		dataChannel: ch,
 	}
 }
 
-func RabbitRun() {
-	rabbitAddr := fmt.Sprintf("amqps://%s:%s@%s", rabbitLogin, rabbitPwd, rabbitHost)
-	isStream := false
-	conn, err := amqp.Dial(rabbitAddr)
-	failOnError(err, "Failed to connect to RabbitMQ")
-	defer conn.Close()
+func (c *Consumer) Connect() error {
+	conn, err := amqp.Dial(c.addr)
+	if err != nil {
+		return err
+	}
+	c.conn = conn
 
-	ch, err := conn.Channel()
-	failOnError(err, "Failed to open channel")
-	defer ch.Close()
+	c.channel, err = c.conn.Channel()
+	if err != nil {
+		return err
+	}
 
-	q, err := ch.QueueDeclare(
-		rabbitChannel,
+	go func() {
+		log.Printf("closing: %s", <-c.conn.NotifyClose(make(chan *amqp.Error)))
+		c.done <- errors.New("channel closed")
+
+	}()
+
+	_, err = c.channel.QueueDeclare(
+		c.queue,
 		false,
 		false,
-		false,
+		true,
 		false,
 		nil,
 	)
-	failOnError(err, "Failed to declare a queue")
 
-	msgs, err := ch.Consume(
-		q.Name, // queue
-		"",     // consumer
-		true,   // auto-ack
-		false,  // exclusive
-		false,  // no-local
-		false,  // no-wait
-		nil,    // args
-	)
-	failOnError(err, "Failed to register a consumer")
+	return err
+}
 
-	forever := make(chan bool)
-	stream := make(chan bool)
+func (c *Consumer) Reconnect(ctx context.Context) (<-chan amqp.Delivery, error) {
+	be := backoff.NewExponentialBackOff()
+	be.MaxElapsedTime = 3 * time.Minute
+	be.InitialInterval = 1 * time.Second
+	be.Multiplier = 2
+	be.MaxInterval = 30 * time.Second
 
-	go func() {
-		for msg := range msgs {
-			logger.Info.Printf(string(msg.Body))
+	b := backoff.WithContext(be, ctx)
+	for {
+		d := b.NextBackOff()
+		if d == backoff.Stop {
+			return nil, fmt.Errorf("stop reconnecting")
+		}
 
-			taskInfo := &structures.Task{}
-			err := json.Unmarshal(msg.Body, taskInfo)
-
-			if err != nil {
-				logger.Error.Printf(err.Error())
+		select {
+		case <-ctx.Done():
+			return nil, nil
+		case <-time.After(d):
+			if err := c.Connect(); err != nil {
+				log.Printf("could not connect in reconnect call: %+v", err)
+				continue
 			}
 
-			if taskInfo.Status == "" {
-				if !isStream {
-					logger.Info.Printf("Start new task %s", taskInfo.UUID)
-					isStream = true
-					go cameras.WorkWithVideo(taskInfo.CameraIP, taskInfo.ADDR, stream)
-				} else {
-					logger.Info.Println("Stream already started")
-				}
-			} else if taskInfo.CameraIP == "" {
-				if isStream {
-					logger.Info.Printf("Stop task %s", taskInfo.UUID)
-					isStream = false
-					stream <- true
-				} else {
-					logger.Info.Println("Stream didn't started")
-				}
-			} else {
-				logger.Error.Printf("Unsupported format")
+			msgs, err := c.channel.Consume(
+				c.queue,
+				"",
+				false,
+				false,
+				false,
+				false,
+				nil,
+			)
+			if err != nil {
+				log.Printf("could not connect: %+v", err)
+				continue
+			}
+
+			return msgs, nil
+		}
+	}
+}
+
+func (c *Consumer) Receive(ctx context.Context) error {
+	msgs, err := c.Reconnect(ctx)
+	if err != nil {
+		return err
+	}
+
+	for {
+		go func(msgs <-chan amqp.Delivery) {
+			for d := range msgs {
+				c.dataChannel <- d.Body
+			}
+		}(msgs)
+
+		if <-c.done != nil {
+			msgs, err = c.Reconnect(ctx)
+			if err != nil {
+				return err
 			}
 		}
-	}()
+	}
+}
 
-	logger.Info.Printf(" [*] Waiting for messages.")
-	<-forever
+func (c *Consumer) Close() error {
+	err := c.channel.Close()
+	if err != nil {
+		return err
+	}
+
+	return c.conn.Close()
 }

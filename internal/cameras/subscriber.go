@@ -2,15 +2,16 @@ package cameras
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
+	"time"
+
 	"github.com/deepch/vdk/av"
 	"github.com/deepch/vdk/codec/h264parser"
 	"github.com/deepch/vdk/format/rtsp"
 	"github.com/pion/webrtc/v3"
 	"github.com/pion/webrtc/v3/pkg/media"
 	"gitlab.com/inview-team/raptor_team/worker/internal/logger"
-	"io"
-	"net/http"
-	"time"
 )
 
 var (
