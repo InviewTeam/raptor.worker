@@ -18,9 +18,8 @@ var (
 	outboundVideoTrack *webrtc.TrackLocalStaticSample
 )
 
-func WorkWithVideo(url string, addr string, ch <-chan bool) {
+func WorkWithVideo(url string, addr string) {
 	var err error
-	stream := make(chan bool)
 	outboundVideoTrack, err = webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{
 		MimeType: "video/h264",
 	}, "pion-rtsp", "pion-rtsp")
@@ -29,25 +28,12 @@ func WorkWithVideo(url string, addr string, ch <-chan bool) {
 		logger.Critical.Panic(err.Error())
 	}
 
-	go rtspConsumer(url, stream)
+	go rtspConsumer(url)
 	server := &http.Server{Addr: addr}
 	go server.ListenAndServe()
-
-	for {
-		select {
-		case msg := <-ch:
-			if msg {
-				logger.Info.Println("Close streaming server")
-				server.Close()
-				stream <- true
-				return
-			}
-		default:
-		}
-	}
 }
 
-func rtspConsumer(url string, ch <-chan bool) {
+func rtspConsumer(url string) error {
 	annexbNALUStartCode := func() []byte { return []byte{0x00, 0x00, 0x00, 0x01} }
 	for {
 		session, err := rtsp.Dial(url)
@@ -77,38 +63,29 @@ func rtspConsumer(url string, ch <-chan bool) {
 		logger.Info.Println("Start streaming ", url)
 
 		for {
-			select {
-			case <-ch:
-				logger.Info.Println("Stream stopped")
-				if err = session.Close(); err != nil {
-					logger.Info.Println("session Close error", err)
-				}
-				return
-			default:
-				pkt, err := session.ReadPacket()
-				if err != nil {
-					break
-				}
+			pkt, err := session.ReadPacket()
+			if err != nil {
+				break
+			}
 
-				if pkt.Idx != 0 {
-					continue
-				}
+			if pkt.Idx != 0 {
+				continue
+			}
 
-				pkt.Data = pkt.Data[4:]
+			pkt.Data = pkt.Data[4:]
 
-				if pkt.IsKeyFrame {
-					pkt.Data = append(annexbNALUStartCode(), pkt.Data...)
-					pkt.Data = append(codecs[0].(h264parser.CodecData).PPS(), pkt.Data...)
-					pkt.Data = append(annexbNALUStartCode(), pkt.Data...)
-					pkt.Data = append(codecs[0].(h264parser.CodecData).SPS(), pkt.Data...)
-					pkt.Data = append(annexbNALUStartCode(), pkt.Data...)
-				}
+			if pkt.IsKeyFrame {
+				pkt.Data = append(annexbNALUStartCode(), pkt.Data...)
+				pkt.Data = append(codecs[0].(h264parser.CodecData).PPS(), pkt.Data...)
+				pkt.Data = append(annexbNALUStartCode(), pkt.Data...)
+				pkt.Data = append(codecs[0].(h264parser.CodecData).SPS(), pkt.Data...)
+				pkt.Data = append(annexbNALUStartCode(), pkt.Data...)
+			}
 
-				bufferDuration := pkt.Time - previousTime
-				previousTime = pkt.Time
-				if err = outboundVideoTrack.WriteSample(media.Sample{Data: pkt.Data, Duration: bufferDuration}); err != nil && err != io.ErrClosedPipe {
-					logger.Critical.Panic("RTSP feed must begin with a H264 codec")
-				}
+			bufferDuration := pkt.Time - previousTime
+			previousTime = pkt.Time
+			if err = outboundVideoTrack.WriteSample(media.Sample{Data: pkt.Data, Duration: bufferDuration}); err != nil && err != io.ErrClosedPipe {
+				logger.Critical.Panic("RTSP feed must begin with a H264 codec")
 			}
 		}
 
