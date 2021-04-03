@@ -1,13 +1,15 @@
 package cameras
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"github.com/deepch/vdk/codec/h264parser"
 	"io"
 	"net/http"
 	"time"
 
 	"github.com/deepch/vdk/av"
-	"github.com/deepch/vdk/codec/h264parser"
 	"github.com/deepch/vdk/format/rtsp"
 	"github.com/pion/webrtc/v3"
 	"github.com/pion/webrtc/v3/pkg/media"
@@ -18,7 +20,7 @@ var (
 	outboundVideoTrack *webrtc.TrackLocalStaticSample
 )
 
-func WorkWithVideo(url string, addr string) {
+func WorkWithVideo(url string) {
 	var err error
 	outboundVideoTrack, err = webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{
 		MimeType: "video/h264",
@@ -29,8 +31,6 @@ func WorkWithVideo(url string, addr string) {
 	}
 
 	go rtspConsumer(url)
-	server := &http.Server{Addr: addr}
-	go server.ListenAndServe()
 }
 
 func rtspConsumer(url string) error {
@@ -74,6 +74,7 @@ func rtspConsumer(url string) error {
 
 			pkt.Data = pkt.Data[4:]
 
+			// For every key-frame pre-pend the SPS and PPS
 			if pkt.IsKeyFrame {
 				pkt.Data = append(annexbNALUStartCode(), pkt.Data...)
 				pkt.Data = append(codecs[0].(h264parser.CodecData).PPS(), pkt.Data...)
@@ -85,7 +86,7 @@ func rtspConsumer(url string) error {
 			bufferDuration := pkt.Time - previousTime
 			previousTime = pkt.Time
 			if err = outboundVideoTrack.WriteSample(media.Sample{Data: pkt.Data, Duration: bufferDuration}); err != nil && err != io.ErrClosedPipe {
-				logger.Critical.Panic("RTSP feed must begin with a H264 codec")
+				panic(err)
 			}
 		}
 
@@ -137,4 +138,49 @@ func DoSignaling(w http.ResponseWriter, r *http.Request) {
 	if _, err := w.Write(response); err != nil {
 		panic(err)
 	}
+}
+
+func NewPeerConnection() {
+	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	if err != nil {
+		panic(err)
+	}
+
+	peerConnection.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
+		fmt.Printf("Connection State has changed %s \n", connectionState.String())
+	})
+
+	offer, err := peerConnection.CreateOffer(nil)
+	if err != nil {
+		panic(err)
+	}
+
+	gatherComplete := webrtc.GatheringCompletePromise(peerConnection)
+
+	if err = peerConnection.SetLocalDescription(offer); err != nil {
+		panic(err)
+	}
+
+	offerJSON, err := json.Marshal(*peerConnection.LocalDescription())
+	if err != nil {
+		panic(err)
+	}
+
+	resp, err := http.Post("http://0.0.0.0:8080/offer", "application/json", bytes.NewReader(offerJSON))
+	if err != nil {
+		panic(err)
+	}
+
+	resp.Close = true
+
+	var answer webrtc.SessionDescription
+
+	if err = json.NewDecoder(resp.Body).Decode(&answer); err != nil {
+		logger.Critical.Panic(err.Error())
+	}
+
+	resp.Body.Close()
+
+	<-gatherComplete
+
 }

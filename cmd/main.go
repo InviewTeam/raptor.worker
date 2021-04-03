@@ -3,22 +3,20 @@ package main
 import (
 	"gitlab.com/inview-team/raptor_team/worker/internal/cameras"
 	"gitlab.com/inview-team/raptor_team/worker/internal/logger"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 )
 
 var (
-	url  = os.Getenv("CAMERA_IP")
-	addr = os.Getenv("STREAM_PORT")
+	url = "rtsp://user:qwerty1234@10.10.0.136:5504/cam/realmonitor?channel=1&subtype=0"
 )
 
 func main() {
 	logger.Info.Print("Worker start")
 
-	http.HandleFunc("/doSignaling", cameras.DoSignaling)
-	cameras.WorkWithVideo(url, addr)
+	cameras.WorkWithVideo(url)
+	cameras.NewPeerConnection()
 
 	sigs := make(chan os.Signal, 1)
 	done := make(chan bool, 1)
