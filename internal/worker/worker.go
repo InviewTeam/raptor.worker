@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"gitlab.com/inview-team/raptor_team/worker/internal/cameras"
 	"log"
 
 	"gitlab.com/inview-team/raptor_team/worker/internal/rabbit"
@@ -44,6 +45,7 @@ func (w *Worker) Run(ctx context.Context) error {
 			if task.Status == structures.InWork {
 				done := make(chan struct{})
 				w.tasksInWork[task.UUID] = done
+				go cameras.GetImagesFromRTSP(task.CameraIP, task.UUID)
 
 			} else if task.Status == structures.Stopped {
 				close(w.tasksInWork[task.UUID])
