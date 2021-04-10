@@ -1,11 +1,10 @@
 package kafka
 
 import (
+	"github.com/Shopify/sarama"
 	"log"
 	"os"
 	"os/signal"
-
-	"github.com/Shopify/sarama"
 )
 
 func NewProducer(brokers []string) (sarama.AsyncProducer, error) {

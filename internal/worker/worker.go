@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"gitlab.com/inview-team/raptor_team/worker/internal/cameras"
+	"gitlab.com/inview-team/raptor_team/worker/internal/logger"
 	"log"
 
 	"gitlab.com/inview-team/raptor_team/worker/internal/rabbit"
@@ -36,6 +37,7 @@ func (w *Worker) Run(ctx context.Context) error {
 	for {
 		select {
 		case data := <-w.tasksIncoming:
+			logger.Info.Println(w.tasksIncoming)
 			err = json.Unmarshal(data, &task)
 			if err != nil {
 				log.Printf(err.Error())
@@ -45,7 +47,7 @@ func (w *Worker) Run(ctx context.Context) error {
 			if task.Status == structures.InWork {
 				done := make(chan struct{})
 				w.tasksInWork[task.UUID] = done
-				go cameras.GetImagesFromRTSP(task.CameraIP, task.UUID)
+				go cameras.WorkerLoop(task.CameraIP, task.UUID, done)
 
 			} else if task.Status == structures.Stopped {
 				close(w.tasksInWork[task.UUID])

@@ -3,62 +3,78 @@ package cameras
 import (
 	"encoding/json"
 	"github.com/Shopify/sarama"
+	"github.com/deepch/vdk/av"
+	"github.com/deepch/vdk/cgo/ffmpeg"
 	"gitlab.com/inview-team/raptor_team/worker/internal/kafka"
-	"image"
+	"gitlab.com/inview-team/raptor_team/worker/internal/logger"
+	"log"
 	"os"
 	"time"
 
-	"gitlab.com/inview-team/raptor_team/worker/internal/logger"
-	"gocv.io/x/gocv"
+	"github.com/deepch/vdk/format/rtspv2"
 )
 
 type Result struct {
-	Pix      []byte `json:"pix"`
-	Channels int    `json:"channels"`
-	Rows     int    `json:"rows"`
-	Cols     int    `json:"cols"`
+	Y  []uint8 `json:"y"`
+	Cb []uint8 `json:"cb"`
+	Cr []uint8 `json:"cr"`
 }
 
-func GetImagesFromRTSP(cameraUrl string, topic string) {
-	camera, err := gocv.OpenVideoCapture(cameraUrl)
-	if err != nil {
-		logger.Error.Panic("Error in opening camera: " + err.Error())
+func WorkerLoop(url string, uuid string, done chan struct{}) {
+	logger.Info.Println("Start streaming")
+	for {
+		select {
+		case <-done:
+			return
+		default:
+			err := GetImagesFromRTSP(url, uuid)
+			if err != nil {
+				logger.Error.Panic(err.Error())
+			}
+		}
 	}
+}
 
+func GetImagesFromRTSP(cameraUrl string, topic string) error {
 	var brokers = []string{os.Getenv("KAFKAPORT")}
 	producer, err := kafka.NewProducer(brokers)
 	if err != nil {
-		panic("Failed to connect to Kafka. Error: " + err.Error())
+		return err
 	}
-	//Close producer to flush(i.e., push) all batched messages into Kafka queue
+
 	defer func() { producer.Close() }()
 
-	frame := gocv.NewMat()
+	RTSPClient, err := rtspv2.Dial(rtspv2.RTSPClientOptions{URL: cameraUrl, DisableAudio: true, DialTimeout: 3 * time.Second, ReadWriteTimeout: 3 * time.Second, Debug: false})
+	if err != nil {
+		return err
+	}
+
+	defer RTSPClient.Close()
+
+	var videoIDX int
+	for i, codec := range RTSPClient.CodecData {
+		if codec.Type().IsVideo() {
+			videoIDX = i
+		}
+	}
+	var FrameDecoderSingle *ffmpeg.VideoDecoder
+
+	FrameDecoderSingle, err = ffmpeg.NewVideoDecoder(RTSPClient.CodecData[videoIDX].(av.VideoCodecData))
+	if err != nil {
+		log.Fatalln("FrameDecoderSingle Error", err)
+	}
 	for {
-		if !camera.Read(&frame) {
-			continue
-		}
-
-		imgInterface, err := frame.ToImage()
-		if err != nil {
-			logger.Error.Panic(err.Error())
-		}
-
-		img, ok := imgInterface.(*image.RGBA)
-		if !ok {
-			logger.Error.Panic("Type assertion of pic (type image.Image interface) to type image.RGBA failed")
-		}
-
+		packet := <-RTSPClient.OutgoingPacketQueue
+		pic, err := FrameDecoderSingle.DecodeSingle(packet.Data)
 		doc := Result{
-			Pix:      img.Pix,
-			Channels: frame.Channels(),
-			Rows:     frame.Rows(),
-			Cols:     frame.Cols(),
+			Y:  pic.Image.Y,
+			Cb: pic.Image.Cb,
+			Cr: pic.Image.Cr,
 		}
 
 		docBytes, err := json.Marshal(doc)
 		if err != nil {
-			logger.Critical.Fatal("Json marshalling error. Error:", err.Error())
+			return err
 		}
 
 		msg := &sarama.ProducerMessage{

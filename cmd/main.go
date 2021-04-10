@@ -2,12 +2,11 @@ package main
 
 import (
 	"context"
+	"gitlab.com/inview-team/raptor_team/worker/internal/logger"
 	"gitlab.com/inview-team/raptor_team/worker/internal/worker"
 	"os"
 	"os/signal"
 	"syscall"
-
-	"gitlab.com/inview-team/raptor_team/worker/internal/logger"
 )
 
 var (
@@ -16,7 +15,7 @@ var (
 )
 
 func main() {
-	logger.Info.Print("Worker start")
+	logger.Info.Println("Start worker service")
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
@@ -25,6 +24,8 @@ func main() {
 	defer cancel()
 
 	worker := worker.New(rabbitAddr, rabbitQueue)
+
+	go worker.Listen(ctx)
 	go worker.Run(ctx)
 
 	for {
