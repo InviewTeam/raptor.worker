@@ -22,6 +22,7 @@ func New(addr, queue string) *Worker {
 	return &Worker{
 		con:           rabbit.NewConsumer(addr, queue, tasks),
 		tasksIncoming: tasks,
+		tasksInWork:   make(map[string]chan struct{}),
 	}
 }
 
@@ -37,8 +38,8 @@ func (w *Worker) Run(ctx context.Context) error {
 	for {
 		select {
 		case data := <-w.tasksIncoming:
-			logger.Info.Println(w.tasksIncoming)
 			err = json.Unmarshal(data, &task)
+			logger.Info.Println(task)
 			if err != nil {
 				log.Printf(err.Error())
 				break

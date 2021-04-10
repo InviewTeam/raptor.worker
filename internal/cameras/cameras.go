@@ -21,13 +21,13 @@ type Result struct {
 }
 
 func WorkerLoop(url string, uuid string, done chan struct{}) {
-	logger.Info.Println("Start streaming")
+	logger.Info.Println("Start streaming: ", uuid)
 	for {
 		select {
 		case <-done:
 			return
 		default:
-			err := GetImagesFromRTSP(url, uuid)
+			err := GetImagesFromRTSP(url, uuid, done)
 			if err != nil {
 				logger.Error.Panic(err.Error())
 			}
@@ -35,7 +35,7 @@ func WorkerLoop(url string, uuid string, done chan struct{}) {
 	}
 }
 
-func GetImagesFromRTSP(cameraUrl string, topic string) error {
+func GetImagesFromRTSP(cameraUrl string, topic string, done chan struct{}) error {
 	var brokers = []string{os.Getenv("KAFKAPORT")}
 	producer, err := kafka.NewProducer(brokers)
 	if err != nil {
@@ -64,25 +64,32 @@ func GetImagesFromRTSP(cameraUrl string, topic string) error {
 		log.Fatalln("FrameDecoderSingle Error", err)
 	}
 	for {
-		packet := <-RTSPClient.OutgoingPacketQueue
-		pic, err := FrameDecoderSingle.DecodeSingle(packet.Data)
-		doc := Result{
-			Y:  pic.Image.Y,
-			Cb: pic.Image.Cb,
-			Cr: pic.Image.Cr,
-		}
+		select {
+		case <-done:
+			break
+		default:
+			packet := <-RTSPClient.OutgoingPacketQueue
+			pic, err := FrameDecoderSingle.DecodeSingle(packet.Data)
+			doc := Result{
+				Y:  pic.Image.Y,
+				Cb: pic.Image.Cb,
+				Cr: pic.Image.Cr,
+			}
 
-		docBytes, err := json.Marshal(doc)
-		if err != nil {
-			return err
-		}
+			docBytes, err := json.Marshal(doc)
+			if err != nil {
+				return err
+			}
 
-		msg := &sarama.ProducerMessage{
-			Topic:     topic,
-			Value:     sarama.ByteEncoder(docBytes),
-			Timestamp: time.Now(),
-		}
+			msg := &sarama.ProducerMessage{
+				Topic:     topic,
+				Value:     sarama.ByteEncoder(docBytes),
+				Timestamp: time.Now(),
+			}
 
-		producer.Input() <- msg
+			producer.Input() <- msg
+		}
 	}
+	logger.Info.Println("Stop streaming")
+	return nil
 }
