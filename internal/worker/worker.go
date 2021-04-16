@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"gitlab.com/inview-team/raptor_team/worker/internal/cameras"
 	"gitlab.com/inview-team/raptor_team/worker/internal/logger"
+	"gitlab.com/inview-team/raptor_team/worker/internal/protocols"
 	"log"
 
 	"gitlab.com/inview-team/raptor_team/worker/internal/rabbit"
@@ -48,7 +49,7 @@ func (w *Worker) Run(ctx context.Context) error {
 			if task.Status == structures.InWork {
 				done := make(chan struct{})
 				w.tasksInWork[task.UUID] = done
-				go cameras.WorkerLoop(task.CameraIP, task.UUID, done)
+				go protocols.RTSPLoop(task.CameraIP, task.UUID, done)
 
 			} else if task.Status == structures.Stopped {
 				close(w.tasksInWork[task.UUID])
